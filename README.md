@@ -329,7 +329,7 @@ tool/run_native_benchmark.sh    # decode latency benchmark
 flutter test                    # Dart unit and widget tests
 ```
 
-`docs/ARCHITECTURE.md` explains the frame paths, the threading model and why
+`doc/ARCHITECTURE.md` explains the frame paths, the threading model and why
 this package does not use ML Kit or Apple Vision.
 
 ## License

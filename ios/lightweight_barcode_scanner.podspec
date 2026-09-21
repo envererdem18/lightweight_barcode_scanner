@@ -11,7 +11,7 @@ Lightweight, offline barcode and QR scanner. Camera frames are decoded inside
 the native capture pipeline by a shared C++ core; Flutter only receives the
 decoded results.
                        DESC
-  s.homepage         = 'https://github.com/enver/lightweight_barcode_scanner'
+  s.homepage         = 'https://github.com/envererdem18/lightweight_barcode_scanner'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Enver Erdem' => 'envererdem18@gmail.com' }
   s.source           = { :path => '.' }

@@ -46,7 +46,7 @@ set_target_properties(lbs_core PROPERTIES
 
 if(NOT MSVC)
   # Keeps every symbol in its own section so the linker can drop the parts of
-  # ZXing we never call (see docs/ARCHITECTURE.md, "Binary size").
+  # ZXing we never call (see doc/ARCHITECTURE.md, "Binary size").
   target_compile_options(lbs_core PRIVATE
     -ffunction-sections -fdata-sections -fno-strict-aliasing)
 endif()

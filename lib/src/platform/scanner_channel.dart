@@ -10,15 +10,15 @@ import 'scanner_preview.dart';
 /// Thin transport over the platform channels.
 ///
 /// Only decoded results and small control messages cross this boundary; camera
-/// frames stay on the native side (see docs/ARCHITECTURE.md).
+/// frames stay on the native side (see doc/ARCHITECTURE.md).
 class ScannerChannel {
   ScannerChannel({MethodChannel? methodChannel})
     : _methods =
           methodChannel ??
-          const MethodChannel('com.enver.lightweight_barcode_scanner/methods');
+          const MethodChannel('dev.enver.lightweight_barcode_scanner/methods');
 
   static const String _eventChannelPrefix =
-      'com.enver.lightweight_barcode_scanner/events';
+      'dev.enver.lightweight_barcode_scanner/events';
 
   final MethodChannel _methods;
 

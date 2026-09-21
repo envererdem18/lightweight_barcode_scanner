@@ -4,7 +4,7 @@
 // platform layers (Android/JNI, iOS/Objective-C++, Dart/FFI). It must never
 // reference AVFoundation, CameraX, JNI, Flutter or ZXing types.
 //
-// Frame ownership contract (see docs/ARCHITECTURE.md):
+// Frame ownership contract (see doc/ARCHITECTURE.md):
 //
 //   owner      : the platform camera stack (CVPixelBuffer / ImageProxy)
 //   format     : 8-bit luminance (the Y plane of an NV12 / YUV_420_888 frame)

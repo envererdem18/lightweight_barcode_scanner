@@ -1,4 +1,4 @@
-package com.enver.lightweight_barcode_scanner
+package dev.enver.lightweight_barcode_scanner
 
 import android.app.Activity
 import android.content.Context
@@ -201,6 +201,6 @@ class LightweightBarcodeScannerPlugin : FlutterPlugin, MethodCallHandler, Activi
     }
 
     private companion object {
-        const val METHOD_CHANNEL = "com.enver.lightweight_barcode_scanner/methods"
+        const val METHOD_CHANNEL = "dev.enver.lightweight_barcode_scanner/methods"
     }
 }

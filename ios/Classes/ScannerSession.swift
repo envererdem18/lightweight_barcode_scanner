@@ -5,7 +5,7 @@ import UIKit
 /// One camera session: AVFoundation for acquisition, the shared C++ core for
 /// decoding, a Flutter texture for the preview.
 ///
-/// Frame path (see docs/ARCHITECTURE.md):
+/// Frame path (see doc/ARCHITECTURE.md):
 ///
 ///   source    : AVCaptureVideoDataOutput, 420YpCbCr8BiPlanarFullRange (NV12)
 ///   preview   : the CVPixelBuffer is retained and handed to Flutter's texture
@@ -25,7 +25,7 @@ final class ScannerSession: NSObject {
   private let session = AVCaptureSession()
   private let videoOutput = AVCaptureVideoDataOutput()
   private let captureQueue = DispatchQueue(
-    label: "com.enver.lightweight_barcode_scanner.capture",
+    label: "dev.enver.lightweight_barcode_scanner.capture",
     qos: .userInitiated
   )
   private var device: AVCaptureDevice?
@@ -67,7 +67,7 @@ final class ScannerSession: NSObject {
     eventChannel.setStreamHandler(self)
   }
 
-  static let eventChannelPrefix = "com.enver.lightweight_barcode_scanner/events"
+  static let eventChannelPrefix = "dev.enver.lightweight_barcode_scanner/events"
 
   // MARK: - lifecycle
 

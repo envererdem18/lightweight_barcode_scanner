@@ -1,4 +1,4 @@
-package com.enver.lightweight_barcode_scanner_example
+package dev.enver.lightweight_barcode_scanner_example
 
 import io.flutter.embedding.android.FlutterActivity
 

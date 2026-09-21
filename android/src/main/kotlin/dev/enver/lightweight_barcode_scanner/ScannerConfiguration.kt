@@ -1,4 +1,4 @@
-package com.enver.lightweight_barcode_scanner
+package dev.enver.lightweight_barcode_scanner
 
 /** Analysis resolution, as a plain pair so this file stays framework-free. */
 data class AnalysisResolution(val width: Int, val height: Int)

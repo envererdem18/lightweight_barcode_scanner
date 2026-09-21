@@ -75,12 +75,12 @@ extern "C" {
 // The package name contains underscores, hence the _1 escapes in these
 // symbols (JNI name mangling).
 #define LBS_JNI(name) \
-  Java_com_enver_lightweight_1barcode_1scanner_NativeDecoder_##name
+  Java_dev_enver_lightweight_1barcode_1scanner_NativeDecoder_##name
 
 JNIEXPORT jlong JNICALL LBS_JNI(nativeCreate)(JNIEnv* env, jclass clazz) {
   if (g_barcode_class == nullptr) {
     jclass local = env->FindClass(
-        "com/enver/lightweight_barcode_scanner/NativeBarcode");
+        "dev/enver/lightweight_barcode_scanner/NativeBarcode");
     if (local == nullptr) return 0;
     g_barcode_class = static_cast<jclass>(env->NewGlobalRef(local));
     env->DeleteLocalRef(local);

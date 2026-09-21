@@ -1,4 +1,4 @@
-package com.enver.lightweight_barcode_scanner
+package dev.enver.lightweight_barcode_scanner
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

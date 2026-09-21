@@ -1,4 +1,4 @@
-package com.enver.lightweight_barcode_scanner
+package dev.enver.lightweight_barcode_scanner
 
 import android.content.Context
 import android.graphics.SurfaceTexture
@@ -35,7 +35,7 @@ import kotlin.math.roundToInt
  * One camera session: CameraX for acquisition, the shared C++ core for
  * decoding, a Flutter texture for the preview.
  *
- * Frame path (see docs/ARCHITECTURE.md):
+ * Frame path (see doc/ARCHITECTURE.md):
  *
  *   preview   : camera -> SurfaceTexture -> Flutter texture. GPU only, never
  *               touched by the CPU and never seen by Dart.
@@ -518,7 +518,7 @@ class ScannerSession(
             ?: Surface.ROTATION_0
 
     companion object {
-        const val EVENT_CHANNEL_PREFIX = "com.enver.lightweight_barcode_scanner/events"
+        const val EVENT_CHANNEL_PREFIX = "dev.enver.lightweight_barcode_scanner/events"
         private const val MAX_TRACKED_RESULTS = 64
     }
 }

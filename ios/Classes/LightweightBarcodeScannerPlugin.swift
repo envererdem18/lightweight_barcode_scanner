@@ -20,7 +20,7 @@ public class LightweightBarcodeScannerPlugin: NSObject, FlutterPlugin {
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
-      name: "com.enver.lightweight_barcode_scanner/methods",
+      name: "dev.enver.lightweight_barcode_scanner/methods",
       binaryMessenger: registrar.messenger()
     )
     let instance = LightweightBarcodeScannerPlugin(

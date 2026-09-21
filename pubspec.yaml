@@ -1,7 +1,7 @@
 name: lightweight_barcode_scanner
 description: "Lightweight, offline, ML-free barcode & QR scanner for Flutter powered by a shared ZXing-C++ core."
 version: 0.1.0
-homepage: https://github.com/enver/lightweight_barcode_scanner
+homepage: https://github.com/envererdem18/lightweight_barcode_scanner
 topics:
   - barcode
   - qrcode
@@ -42,7 +42,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.enver.lightweight_barcode_scanner
+        package: dev.enver.lightweight_barcode_scanner
         pluginClass: LightweightBarcodeScannerPlugin
       ios:
         pluginClass: LightweightBarcodeScannerPlugin

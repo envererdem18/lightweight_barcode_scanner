@@ -1,4 +1,4 @@
-group = "com.enver.lightweight_barcode_scanner"
+group = "dev.enver.lightweight_barcode_scanner"
 version = "1.0-SNAPSHOT"
 
 buildscript {
@@ -26,7 +26,7 @@ plugins {
 }
 
 android {
-    namespace = "com.enver.lightweight_barcode_scanner"
+    namespace = "dev.enver.lightweight_barcode_scanner"
 
     compileSdk = 36
 
