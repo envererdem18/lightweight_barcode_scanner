@@ -11,6 +11,10 @@ no OpenCV and no network access.
 Native camera ──▶ luminance plane ──▶ shared ZXing-C++ decoder ──▶ result ──▶ Flutter
 ```
 
+For the full picture - frame ownership, threading, rotation and region of
+interest, memory and why there is no ML runtime - see
+[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
+
 | | |
 |---|---|
 | Platforms | Android 7.0 (API 24)+, iOS 13+ |
