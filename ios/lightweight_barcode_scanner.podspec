@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'lightweight_barcode_scanner'
-  s.version          = '0.1.0'
+  s.version          = '0.2.0'
   s.summary          = 'Offline barcode & QR scanner powered by a shared ZXing-C++ core.'
   s.description      = <<-DESC
 Lightweight, offline barcode and QR scanner. Camera frames are decoded inside
@@ -16,17 +16,22 @@ decoded results.
   s.author           = { 'Enver Erdem' => 'envererdem18@gmail.com' }
   s.source           = { :path => '.' }
 
-  # CocoaPods drops source_files outside the podspec directory, so the shared
-  # C++ core - which has to stay at the package root for the Android build and
-  # the host tests - is pulled in through the one-line forwarders in
-  # Classes/forwarders (see tool/generate_ios_sources.sh).
-  s.source_files = 'Classes/**/*'
+  # The sources live in the Swift package layout so that CocoaPods and Swift
+  # Package Manager can share one tree. CocoaPods drops source_files outside
+  # the podspec directory, so the shared C++ core - which has to stay at the
+  # package root for the Android build and the host tests - is pulled in
+  # through the one-line forwarders (see tool/generate_ios_sources.sh).
+  s.source_files = 'lightweight_barcode_scanner/Sources/**/*.{h,m,mm,c,cpp,swift}'
+  # vendor_include only exists because SPM refuses a header search path outside
+  # the package; CocoaPods can point at the real directories below, so the
+  # mirror would just be a second copy of every header in the target.
+  s.exclude_files = 'lightweight_barcode_scanner/Sources/lbs_core/vendor_include/**/*'
   s.preserve_paths = [
     '../src/**/*',
     '../third_party/zxing-cpp/**/*',
   ]
   # Only the Objective-C surface is public; the C++ headers stay internal.
-  s.public_header_files = 'Classes/LBSDecoder.h'
+  s.public_header_files = 'lightweight_barcode_scanner/Sources/lbs_core/include/LBSDecoder.h'
 
   s.dependency 'Flutter'
   s.platform = :ios, '13.0'
@@ -52,6 +57,7 @@ decoded results.
   }
 
   s.resource_bundles = {
-    'lightweight_barcode_scanner_privacy' => ['Resources/PrivacyInfo.xcprivacy']
+    'lightweight_barcode_scanner_privacy' =>
+      ['lightweight_barcode_scanner/Sources/lightweight_barcode_scanner/PrivacyInfo.xcprivacy']
   }
 end
