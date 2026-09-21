@@ -42,8 +42,12 @@ without one:
 <string>Scans barcodes with the camera. Images stay on the device.</string>
 ```
 
-The plugin is integrated with CocoaPods. Swift Package Manager is not
-supported yet - see [Known limitations](#known-limitations).
+The plugin is integrated with CocoaPods.
+
+> **🚧 Swift Package Manager: not supported yet, but actively being worked
+> on.** SPM support is in active development and is planned for one of the
+> next releases. Until then use CocoaPods, which Flutter still supports - see
+> [Known limitations](#known-limitations).
 
 ## Basic usage
 
@@ -310,8 +314,14 @@ noisier:
 * **Swift Package Manager is not supported yet.** SPM cannot reference sources
   outside its package directory, and the C++ core is shared with the Android
   CMake build. Use CocoaPods, which Flutter still supports.
-  *Being worked on:* SPM support is in progress and is planned for one of the
-  next releases; CocoaPods will keep working alongside it.
+
+  > **🚧 SPM support is actively being worked on.**
+  >
+  > This is a **temporary** limitation, not a design decision. Swift Package
+  > Manager support is in active development and is planned for one of the
+  > next releases. CocoaPods will keep working alongside it, so nothing you
+  > set up today will break.
+
 * **No web, macOS, Windows or Linux.** The camera pipelines are Android and
   iOS only. The C++ core itself is portable.
 * **Front-camera frames are mirrored.** Matrix codes still decode, but a
