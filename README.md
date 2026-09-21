@@ -307,9 +307,11 @@ noisier:
 
 ## Known limitations
 
-* **Swift Package Manager is not supported.** SPM cannot reference sources
+* **Swift Package Manager is not supported yet.** SPM cannot reference sources
   outside its package directory, and the C++ core is shared with the Android
   CMake build. Use CocoaPods, which Flutter still supports.
+  *Being worked on:* SPM support is in progress and is planned for one of the
+  next releases; CocoaPods will keep working alongside it.
 * **No web, macOS, Windows or Linux.** The camera pipelines are Android and
   iOS only. The C++ core itself is portable.
 * **Front-camera frames are mirrored.** Matrix codes still decode, but a
