@@ -221,20 +221,69 @@ the same feature flags as the Android build.
 
 ## Why the iOS build needs forwarders
 
-CocoaPods resolves `source_files` relative to the podspec and silently drops
-anything outside it; the official `flutter create --template=plugin_ffi`
-podspec says so in a comment. The shared C++ core has to live at the package
-root so that the Android CMake build and the host tests compile the same files,
-so `tool/generate_ios_sources.sh` writes a one-line forwarder in
-`ios/Classes/forwarders/` for each translation unit:
+The shared C++ core has to live at the package root so that the Android CMake
+build and the host tests compile the same files, and neither iOS build system
+can reach it from there:
+
+* **CocoaPods** resolves `source_files` relative to the podspec and silently
+  drops anything outside it; the official `flutter create
+  --template=plugin_ffi` podspec says so in a comment.
+* **Swift Package Manager** is stricter. Sources must live inside the package,
+  and a header search path that leaves the package root is rejected outright:
+  `invalid header search path '../../../src'; header search path should not be
+  outside the package root`.
+
+So `tool/generate_ios_sources.sh` mirrors everything the iOS build needs into
+the Swift package as one-line forwarders. One `.cpp` per translation unit:
 
 ```cpp
-#include "../../../third_party/zxing-cpp/core/src/qrcode/QRReader.cpp"
+// Sources/lbs_core/forwarders/lbs_zxing-cpp_core_src_qrcode_QRReader.cpp
+#include "../../../../../third_party/zxing-cpp/core/src/qrcode/QRReader.cpp"
+```
+
+and one `.h` per header, mirroring the upstream directory layout, so that the
+search path itself can stay inside the package:
+
+```cpp
+// Sources/lbs_core/vendor_include/qrcode/QRReader.h
+#include "../../../../../../third_party/zxing-cpp/core/src/qrcode/QRReader.h"
 ```
 
 A quoted `#include` inside an included file resolves against that file's real
-directory, so ZXing's own includes keep working unchanged. The forwarders are
-generated, never edited.
+directory, so ZXing's own includes keep working unchanged, and `#pragma once`
+still dedupes correctly because it keys on the resolved file rather than the
+path taken to reach it. The forwarders are generated, never edited.
+
+CocoaPods does not need the header mirror - it can point `HEADER_SEARCH_PATHS`
+at the real directories - so the podspec excludes `vendor_include` rather than
+compiling a second copy of every header into the target.
+
+## Why iOS has two Swift Package targets
+
+Swift Package Manager will not mix languages inside a single target, and the
+plugin is both Swift (the Flutter plugin, the capture session) and
+Objective-C++/C++ (the decoder bridge and the shared core). So the package has
+two:
+
+| Target | Language | Holds |
+|---|---|---|
+| `lbs_core` | Objective-C++ / C++ | `LBSDecoder.mm`, the forwarders, the header mirror. Its only public header is `LBSDecoder.h` |
+| `lightweight_barcode_scanner` | Swift | The plugin, the capture session, the privacy manifest. Depends on `lbs_core` |
+
+CocoaPods puts all of it in one module, where Swift sees the Objective-C
+header without an import; SPM needs an explicit one. `ScannerSession.swift`
+therefore guards it:
+
+```swift
+#if canImport(lbs_core)
+  import lbs_core
+#endif
+```
+
+The product is named `lightweight-barcode-scanner` with hyphens, not
+underscores: Flutter looks the library up under that spelling because Swift
+Package Manager turns it into a `CFBundleIdentifier` when the plugin is linked
+dynamically, and those cannot contain underscores.
 
 ## FFI versus platform channels
 
