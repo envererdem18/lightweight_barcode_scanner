@@ -156,8 +156,21 @@ frame. Instead:
 * The rotation needed to make the frame upright is passed to the decoder as
   metadata, where `ZXing::ImageView::rotated()` applies it by flipping strides.
   Negative strides cost nothing.
-* Flutter rotates the preview texture with a `RotatedBox`, which is a GPU
-  transform.
+* The preview is a GPU transform, but which side applies it differs by
+  platform, and getting this wrong rotates the preview twice:
+
+| | Preview buffer | Who makes it upright |
+|---|---|---|
+| Android | CameraX `Preview` → `SurfaceTexture` | **The producer.** A SurfaceTexture-backed preview arrives already cropped and rotated, and Flutter's texture rendering honours that transform. The plugin reports a texture rotation of 0 and an already-rotated preview size; Dart must not turn it again |
+| iOS | The capture `CVPixelBuffer` itself | **Flutter.** The buffer is handed to the texture registry untouched, so Dart rotates it with a `RotatedBox` |
+
+Flutter's own `camera_android_camerax` draws the same distinction, in
+`surface_texture_rotated_preview.dart` versus
+`image_reader_rotated_preview.dart`.
+
+The analysis stream is unaffected on both platforms: it is a separate,
+un-transformed buffer, and the decoder rotates each frame by that frame's own
+`rotationDegrees`.
 
 The scan region is applied **after** rotation, so the rectangle you pass is in
 the same coordinate space as the preview the user is looking at.

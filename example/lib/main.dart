@@ -84,11 +84,16 @@ class _ScannerPageState extends State<ScannerPage> {
               overlay: _Controls(controller: _controller, zoom: _zoom, onZoomChanged: _setZoom),
             ),
           ),
-          Expanded(flex: 2, child: _History(results: _history)),
+          Expanded(
+            flex: 2,
+            child: _History(results: _history, onClear: _clearHistory),
+          ),
         ],
       ),
     );
   }
+
+  void _clearHistory() => setState(_history.clear);
 
   Future<void> _switchCamera() async {
     await _controller.switchCamera();
@@ -134,6 +139,7 @@ class _Controls extends StatelessWidget {
                     onChanged: onZoomChanged,
                   ),
                 ),
+              Text('${zoom.toStringAsFixed(1)}x', style: Theme.of(context).textTheme.labelLarge),
             ],
           ),
         ),
@@ -143,27 +149,47 @@ class _Controls extends StatelessWidget {
 }
 
 class _History extends StatelessWidget {
-  const _History({required this.results});
+  const _History({required this.results, required this.onClear});
 
   final List<BarcodeResult> results;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     if (results.isEmpty) {
       return const Center(child: Text('Point the camera at a barcode.'));
     }
-    return ListView.separated(
-      itemCount: results.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final result = results[index];
-        return ListTile(
-          dense: true,
-          leading: const Icon(Icons.qr_code_2),
-          title: Text(result.value, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Text(result.format.name),
-        );
-      },
+    return Column(
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 8),
+          child: Row(
+            children: <Widget>[
+              Expanded(child: Text(results.length == 1 ? '1 result' : '${results.length} results', style: Theme.of(context).textTheme.labelLarge)),
+              TextButton.icon(onPressed: onClear, icon: const Icon(Icons.clear_all), label: const Text('Clear')),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.separated(
+            itemCount: results.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final result = results[index];
+              return ListTile(
+                dense: true,
+                leading: const Icon(Icons.qr_code_2),
+                trailing: Text(realIndex(index)),
+                title: Text(result.value, maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text(result.format.name),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
+
+  String realIndex(int index) => (results.length - index).toString();
 }

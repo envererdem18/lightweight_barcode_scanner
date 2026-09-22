@@ -246,6 +246,62 @@ controller.captures.listen((capture) {        // one event per analysed frame
 `result.cornerPoints` and `result.boundingBox` are in the coordinate space of
 `result.imageSize`, which is the analysed image after rotation and cropping.
 
+## Auto zoom
+
+```dart
+BarcodeScannerController(
+  autoZoom: AutoZoom.enabled,  // the default
+  initialZoom: 1.4,            // the default: where the camera opens, and rests
+);
+```
+
+| `AutoZoom` | Ramps on |
+|---|---|
+| `enabled` | Both platforms. The default |
+| `enabledIosOnly` | iOS only |
+| `enabledAndroidOnly` | Android only |
+| `disabled` | Neither; the zoom is whatever your app sets |
+
+How much the ramp earns its keep depends on the lens: a camera that focuses
+close barely needs it, and there the narrower field of view is a cost with no
+return. The per-platform modes are there so you can keep it where your own
+device testing says it helps. `initialZoom` is unaffected either way - it is
+where the camera opens on both platforms.
+
+The camera opens at 1.4x. If nothing decodes for about a second the scanner
+zooms in a little at a time, up to 2x, and steps back to 1.4x on the first read.
+It is off during a scan that is working, so most sessions never see it.
+
+1.4x rather than 1x is deliberate. 1x is the ratio that forces the user closest
+to the symbol, which is exactly where the lens stops being able to focus, and it
+makes handing the framing back a visible lurch. Resting slightly tight costs a
+little of the frame and removes both. Pass `initialZoom: 1` for the full field
+of view.
+
+It exists because **linear symbologies are limited by focus, not by
+resolution**. Adjacent narrow bars blur into each other long before the frame
+runs out of pixels, and how much blur a symbol survives scales with how much of
+the frame it covers. Measured against the host fixtures:
+
+| Symbol covers | EAN-13 | Code 128 | QR |
+|---|---|---|---|
+| 2 px per module | 1 px of blur | 1 px | 0 px |
+| 4 px per module | 1 px | 2 px | 2 px |
+| 6 px per module | 4 px | 4 px | 4 px |
+
+The trap is that at 1x the only way to make a barcode fill the frame is to move
+the phone closer, and past the lens's minimum focus distance it cannot focus at
+all - so the symbol gets bigger and blurrier at the same time. Zooming buys the
+same coverage from a distance the lens can still focus at. QR codes rarely need
+it, which is why a scanner can feel flawless on QR and unreliable on a barcode
+in the same session.
+
+The ramp stops at an absolute 2x - not 2x whatever it started from - on purpose:
+past roughly that point a phone is enlarging pixels it never captured, so it
+costs field of view and returns no detail.
+Calling `setZoom` hands control back to your app and switches auto zoom off for
+the rest of the session.
+
 ## Decoder profiles
 
 ```dart
@@ -288,6 +344,9 @@ BarcodeScanner.supportedFormats;  // what this build can decode
 * **Leave `detectionsPerSecond` at 12.** More attempts do not make a symbol
   appear sooner; they just burn battery.
 * **Use `ScanMode.single`** when one code is all you need.
+* **Leave auto zoom on** for 1D symbologies. Raising `ScanResolution` instead
+  does not help: optical blur grows with the pixel count, so the ratio that
+  actually matters stays where it was, and you pay about twice the CPU.
 
 Decode latency of the shared core, measured on an Apple M-series host with
 clean synthetic frames (`tool/run_native_benchmark.sh`). Treat it as relative

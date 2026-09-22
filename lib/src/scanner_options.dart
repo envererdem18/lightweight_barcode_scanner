@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
+
 import 'barcode_format.dart';
 
 /// What the scanner does after a successful detection.
@@ -49,6 +51,38 @@ enum DecoderProfile {
   thorough,
 }
 
+/// Which platforms the auto zoom ramp runs on.
+///
+/// The ramp is a workaround for a lens that cannot focus as close as a barcode
+/// needs it to, and how much that bites depends on the hardware: a camera with
+/// a short minimum focus distance barely needs it, and on such a device the
+/// narrower field of view is a cost with no return. So it is worth being able
+/// to keep it on the platform that needs it and off the one that does not.
+enum AutoZoom {
+  /// Ramp on both platforms.
+  enabled,
+
+  /// Ramp on iOS only; leave Android at [ScannerOptions.initialZoom].
+  enabledIosOnly,
+
+  /// Ramp on Android only; leave iOS at [ScannerOptions.initialZoom].
+  enabledAndroidOnly,
+
+  /// Never ramp. The zoom is whatever the app sets.
+  disabled;
+
+  /// Whether the ramp should run on [platform].
+  ///
+  /// [ScannerOptions.initialZoom] is unaffected: it is where the camera opens
+  /// on every platform, ramp or no ramp.
+  bool appliesTo(TargetPlatform platform) => switch (this) {
+    AutoZoom.enabled => true,
+    AutoZoom.enabledIosOnly => platform == TargetPlatform.iOS,
+    AutoZoom.enabledAndroidOnly => platform == TargetPlatform.android,
+    AutoZoom.disabled => false,
+  };
+}
+
 /// Immutable scanner configuration.
 class ScannerOptions {
   const ScannerOptions({
@@ -62,10 +96,13 @@ class ScannerOptions {
     this.scanRegion,
     this.includeRawBytes = false,
     this.torchEnabled = false,
+    this.autoZoom = AutoZoom.enabled,
+    this.initialZoom = 1.4,
   }) : assert(
          detectionsPerSecond > 0 && detectionsPerSecond <= 60,
          'detectionsPerSecond must be between 1 and 60',
-       );
+       ),
+       assert(initialZoom > 0, 'initialZoom must be greater than 0');
 
   /// Symbologies to look for. Empty means every supported format, which is
   /// slower - narrow it down whenever you can.
@@ -94,6 +131,39 @@ class ScannerOptions {
   /// Turn the torch on as soon as the camera starts.
   final bool torchEnabled;
 
+  /// Zoom in by itself while nothing is decoding, then drop back on the first
+  /// read. On for both platforms by default; see [AutoZoom] to limit it to one.
+  ///
+  /// Linear symbologies are limited by *defocus*, not by resolution: adjacent
+  /// narrow bars blur into each other long before the frame runs out of
+  /// pixels. Measured against the host fixtures, how much blur a symbol
+  /// survives scales with how much of the frame it covers - an EAN-13 rendered
+  /// at 2 px per module tolerates about 1 px of blur, the same symbol at 6 px
+  /// per module tolerates 4.
+  ///
+  /// The trap is that at 1x the only way to make the symbol fill the frame is
+  /// to move the phone closer, and past the lens's minimum focus distance it
+  /// can no longer focus at all - so the symbol gets bigger and blurrier at the
+  /// same time. Zooming buys the same coverage from a distance the lens can
+  /// still focus at. QR codes rarely need it: error correction and wider
+  /// modules make them far more blur-tolerant, which is why a scanner can feel
+  /// flawless on QR and unreliable on a barcode in the same session.
+  ///
+  /// Calling [BarcodeScannerController.setZoom] hands control back to the app
+  /// and switches this off for the rest of the session.
+  final AutoZoom autoZoom;
+
+  /// Zoom ratio the camera opens at, clamped to what it reports. Defaults to
+  /// 1.4, and is also where [autoZoom] returns to after a read.
+  ///
+  /// 1.0 is a poor resting point for a scanner. It is the widest field of view,
+  /// so it is the ratio that forces the user closest to the symbol, and it is
+  /// the far end of a visible jump every time auto zoom hands the framing back.
+  /// Starting slightly tight costs a little of the frame and removes both.
+  ///
+  /// Pass 1 to get the camera's full field of view back.
+  final double initialZoom;
+
   ScannerOptions copyWith({
     Set<BarcodeFormat>? formats,
     ScanMode? scanMode,
@@ -106,6 +176,8 @@ class ScannerOptions {
     bool clearScanRegion = false,
     bool? includeRawBytes,
     bool? torchEnabled,
+    AutoZoom? autoZoom,
+    double? initialZoom,
   }) {
     return ScannerOptions(
       formats: formats ?? this.formats,
@@ -119,10 +191,16 @@ class ScannerOptions {
       scanRegion: clearScanRegion ? null : (scanRegion ?? this.scanRegion),
       includeRawBytes: includeRawBytes ?? this.includeRawBytes,
       torchEnabled: torchEnabled ?? this.torchEnabled,
+      autoZoom: autoZoom ?? this.autoZoom,
+      initialZoom: initialZoom ?? this.initialZoom,
     );
   }
 
   /// The wire format shared by the Android and iOS implementations.
+  ///
+  /// [autoZoom] and [initialZoom] are deliberately absent: both are driven from
+  /// Dart through the existing `setZoom` call, so neither platform needs its
+  /// own copy of the logic.
   Map<String, Object?> toMap() {
     final region = scanRegion;
     return <String, Object?>{

@@ -1,3 +1,31 @@
+## 0.3.0
+
+* **Auto zoom, on by default** (`ScannerOptions.autoZoom`, an `AutoZoom` mode:
+  `enabled`, `enabledIosOnly`, `enabledAndroidOnly` or `disabled`, so the ramp
+  can be kept on the platform whose lens needs it). When nothing decodes
+  for about a second the scanner zooms in gradually, up to an absolute 2x, and
+  steps back to its resting point on the first read. Linear symbologies are
+  limited by focus rather than resolution: at 1x the only way to fill the frame
+  with a barcode is to move inside the lens's minimum focus distance, where it
+  can no longer focus. `setZoom` hands control back to the app and switches it
+  off for the session. See "Auto zoom" in the README for the measurements
+  behind it.
+* **The camera now opens at 1.4x** (`ScannerOptions.initialZoom`), which is also
+  where auto zoom rests. 1x is the ratio that forces the user closest to the
+  symbol, and it made handing the framing back a visible lurch. Pass
+  `initialZoom: 1` for the previous full field of view.
+* The ramp runs in Dart, over the existing `setZoom` call, so neither platform
+  carries its own copy of the logic.
+
+## 0.2.1
+
+* **Fixed the Android camera preview opening sideways.** A SurfaceTexture-backed
+  CameraX preview is already rotated by the producer, and the plugin rotated it
+  a second time in Dart. Android now reports the already-rotated preview size
+  and a texture rotation of 0; iOS, where the capture buffer really does reach
+  Flutter untouched, is unchanged. Decoding was never affected - the analysis
+  stream is a separate buffer with its own per-frame rotation.
+
 ## 0.2.0
 
 * **Swift Package Manager support on iOS.** The plugin now ships a

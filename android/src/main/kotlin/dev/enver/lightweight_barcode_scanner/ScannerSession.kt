@@ -99,7 +99,6 @@ class ScannerSession(
     // read by the analyzer thread, so a volatile reference is all the
     // synchronisation these need.
     @Volatile private var analysisSize = Size(0, 0)
-    @Volatile private var rotationDegrees = 0
 
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = Unit
@@ -469,7 +468,19 @@ class ScannerSession(
 
     private fun describe(): Map<String, Any?> {
         val info = preview?.resolutionInfo
-        val previewSize = info?.resolution ?: Size(0, 0)
+        // A SurfaceTexture-backed CameraX preview arrives already cropped and
+        // rotated - the producer applies the transform, and Flutter's texture
+        // rendering honours it. So the size Dart lays the texture out with is
+        // the rotated one, and the texture itself needs no further turn.
+        // Flutter's own camera_android_camerax plugin makes the same
+        // distinction (surface_texture_rotated_preview.dart vs
+        // image_reader_rotated_preview.dart). The decoder is unaffected: it
+        // rotates each analysis frame by that frame's own rotationDegrees,
+        // which is a separate, un-transformed buffer.
+        val previewSize = rotatedSize(
+            info?.resolution ?: Size(0, 0),
+            info?.rotationDegrees ?: 0,
+        )
         val zoomState = camera?.cameraInfo?.zoomState?.value
         val analysis = if (analysisSize.width > 0) analysisSize else {
             imageAnalysis?.resolutionInfo?.let { rotatedSize(it.resolution, it.rotationDegrees) }
@@ -481,7 +492,7 @@ class ScannerSession(
             "previewHeight" to previewSize.height,
             "analysisWidth" to analysis.width,
             "analysisHeight" to analysis.height,
-            "rotationDegrees" to rotationDegrees,
+            "rotationDegrees" to PREVIEW_TEXTURE_ROTATION,
             "facing" to configuration.facing,
             "isMirrored" to configuration.isFrontFacing,
             "hasTorch" to hasTorch(),
@@ -494,7 +505,6 @@ class ScannerSession(
         if (rotation % 180 == 0) size else Size(size.height, size.width)
 
     private fun refreshGeometry() {
-        rotationDegrees = preview?.resolutionInfo?.rotationDegrees ?: 0
         imageAnalysis?.resolutionInfo?.let {
             analysisSize = rotatedSize(it.resolution, it.rotationDegrees)
         }
@@ -518,6 +528,13 @@ class ScannerSession(
             ?: Surface.ROTATION_0
 
     companion object {
+        /**
+         * The preview texture is delivered upright: CameraX hands the frames to
+         * the SurfaceTexture with the display transform already applied. Dart
+         * must not turn it again.
+         */
+        private const val PREVIEW_TEXTURE_ROTATION = 0
+
         const val EVENT_CHANNEL_PREFIX = "dev.enver.lightweight_barcode_scanner/events"
         private const val MAX_TRACKED_RESULTS = 64
     }

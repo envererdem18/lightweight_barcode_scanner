@@ -30,6 +30,8 @@ class BarcodeScannerController extends ChangeNotifier {
     Rect? scanRegion,
     bool includeRawBytes = false,
     bool torchEnabled = false,
+    AutoZoom autoZoom = AutoZoom.enabled,
+    double initialZoom = 1.4,
     @visibleForTesting ScannerChannel? channel,
   }) : _options = ScannerOptions(
          formats: formats,
@@ -42,6 +44,8 @@ class BarcodeScannerController extends ChangeNotifier {
          scanRegion: scanRegion,
          includeRawBytes: includeRawBytes,
          torchEnabled: torchEnabled,
+         autoZoom: autoZoom,
+         initialZoom: initialZoom,
        ),
        _channel = channel ?? ScannerChannel();
 
@@ -60,6 +64,36 @@ class BarcodeScannerController extends ChangeNotifier {
   // Guards against overlapping start()/stop() calls, which are easy to trigger
   // from lifecycle callbacks.
   Future<void>? _pendingTransition;
+
+  // --- auto zoom ---------------------------------------------------------
+  //
+  // A barcode that will not decode is usually a barcode the lens cannot focus
+  // on: to fill the frame at 1x the phone has to come closer than the minimum
+  // focus distance, and the symbol grows and blurs at the same time. Zooming
+  // buys the same framing from a focusable distance. See ScannerOptions.autoZoom.
+  //
+  // The ramp is deliberately slow and small. It only starts after a stretch of
+  // silence, so a scan that is working never sees it, and it stops at an
+  // absolute 2x - not 2x whatever it started from - because beyond roughly that
+  // point a phone is upscaling pixels it never captured: all cost in field of
+  // view, no gain in detail. With the default resting point that makes the
+  // whole range 1.4x to 2x, small enough that handing the framing back is not
+  // a jolt.
+  Timer? _autoZoomTimer;
+  // Counted in ticks rather than wall-clock time: the ramp only ever moves on
+  // its own timer, so there is nothing a clock would tell it that the tick
+  // count does not, and it keeps the behaviour deterministic under test.
+  int _idleTicks = 0;
+  double _autoZoomBase = 1;
+  bool _autoZoomSuspended = false;
+
+  static const Duration _autoZoomIdleDelay = Duration(milliseconds: 1200);
+  static const Duration _autoZoomStepInterval = Duration(milliseconds: 400);
+  static const double _autoZoomStepFactor = 1.2;
+  static const double _autoZoomCeiling = 2;
+
+  static int get _autoZoomIdleTicks =>
+      _autoZoomIdleDelay.inMilliseconds ~/ _autoZoomStepInterval.inMilliseconds;
 
   ScannerOptions get options => _options;
   ScannerState get state => _state;
@@ -126,6 +160,8 @@ class BarcodeScannerController extends ChangeNotifier {
       _preview = preview;
       _torchEnabled = _options.torchEnabled;
       _zoom = 1;
+      await _applyInitialZoom();
+      _resetAutoZoom(startTimer: true);
       _setState(ScannerState.running, error: null);
     } on BarcodeScannerException catch (exception) {
       await _releaseSession();
@@ -152,6 +188,7 @@ class BarcodeScannerController extends ChangeNotifier {
       await _releaseSession();
       _preview = null;
       _torchEnabled = false;
+      _stopAutoZoom();
       _setState(ScannerState.stopped, error: null);
     });
   }
@@ -162,6 +199,7 @@ class BarcodeScannerController extends ChangeNotifier {
     final sessionId = _sessionId;
     if (_state != ScannerState.running || sessionId == null) return;
     await _channel.pause(sessionId);
+    _stopAutoZoom();
     _setState(ScannerState.paused);
   }
 
@@ -171,6 +209,7 @@ class BarcodeScannerController extends ChangeNotifier {
     final sessionId = _sessionId;
     if (_state != ScannerState.paused || sessionId == null) return;
     await _channel.resume(sessionId);
+    _resetAutoZoom(startTimer: true);
     _setState(ScannerState.running);
   }
 
@@ -191,8 +230,15 @@ class BarcodeScannerController extends ChangeNotifier {
   Future<void> toggleTorch() => setTorch(!_torchEnabled);
 
   /// Sets the zoom ratio, clamped to what the camera reports.
+  ///
+  /// This is the app taking over, so it also switches [ScannerOptions.autoZoom]
+  /// off for the rest of the session: a scanner that fought the user's own
+  /// zoom would be worse than one that never zoomed at all.
   Future<void> setZoom(double zoom) async {
     final sessionId = _requireSession('setZoom');
+    _autoZoomSuspended = true;
+    _autoZoomTimer?.cancel();
+    _autoZoomTimer = null;
     final preview = _preview;
     final clamped = preview == null
         ? zoom
@@ -220,6 +266,10 @@ class BarcodeScannerController extends ChangeNotifier {
     _preview = preview;
     _torchEnabled = false;
     _zoom = 1;
+    // A different camera reports a different zoom range, so the resting point
+    // has to be re-established against it.
+    await _applyInitialZoom();
+    _resetAutoZoom(startTimer: _state == ScannerState.running);
     notifyListeners();
   }
 
@@ -264,12 +314,95 @@ class BarcodeScannerController extends ChangeNotifier {
     _state = ScannerState.disposed;
     // Fire and forget: dispose() cannot be async, but the native session must
     // be released even if nobody awaits it.
+    _stopAutoZoom();
     unawaited(_releaseSession());
     unawaited(_captures.close());
     super.dispose();
   }
 
   // --- internals ---------------------------------------------------------
+
+  /// True when the session is in a state where the ramp may run at all: the
+  /// caller asked for it, the app has not taken the zoom over, and the camera
+  /// actually has zoom to give.
+  bool get _autoZoomAvailable {
+    final preview = _preview;
+    return _options.autoZoom.appliesTo(defaultTargetPlatform) &&
+        !_autoZoomSuspended &&
+        preview != null &&
+        preview.maxZoom > preview.minZoom;
+  }
+
+  /// Moves the camera to [ScannerOptions.initialZoom] without going through the
+  /// public [setZoom], which would read as the app taking over and switch the
+  /// ramp off.
+  Future<void> _applyInitialZoom() async {
+    final preview = _preview;
+    final sessionId = _sessionId;
+    if (preview == null || sessionId == null) return;
+    final target = _options.initialZoom
+        .clamp(preview.minZoom, preview.maxZoom)
+        .toDouble();
+    if ((target - _zoom).abs() < 0.01) return;
+    try {
+      await _channel.setZoom(sessionId, target);
+      _zoom = target;
+    } on Object {
+      // A camera that will not take the ratio just stays where it is.
+    }
+  }
+
+  void _resetAutoZoom({required bool startTimer}) {
+    _autoZoomTimer?.cancel();
+    _autoZoomTimer = null;
+    _autoZoomBase = _zoom;
+    _idleTicks = 0;
+    if (!startTimer || !_autoZoomAvailable) return;
+    _autoZoomTimer = Timer.periodic(_autoZoomStepInterval, (_) => _stepAutoZoom());
+  }
+
+  void _stopAutoZoom() {
+    _autoZoomTimer?.cancel();
+    _autoZoomTimer = null;
+  }
+
+  /// A read means the current framing works: give the field of view back.
+  void _onDecodeSucceeded() {
+    _idleTicks = 0;
+    if (!_autoZoomAvailable || _zoom == _autoZoomBase) return;
+    unawaited(_applyAutoZoom(_autoZoomBase));
+  }
+
+  void _stepAutoZoom() {
+    if (_state != ScannerState.running || !_autoZoomAvailable) return;
+    if (++_idleTicks < _autoZoomIdleTicks) return;
+
+    final preview = _preview!;
+    final ceiling = _autoZoomCeiling;
+    final target = (_zoom * _autoZoomStepFactor).clamp(
+      preview.minZoom,
+      [ceiling, preview.maxZoom].reduce((a, b) => a < b ? a : b),
+    );
+    // Within a hair of the ceiling: stop asking the camera for the same ratio
+    // every tick. The ramp stays where it is until something decodes.
+    if (target - _zoom < 0.01) return;
+    unawaited(_applyAutoZoom(target));
+  }
+
+  Future<void> _applyAutoZoom(double zoom) async {
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    try {
+      await _channel.setZoom(sessionId, zoom);
+      _zoom = zoom;
+      notifyListeners();
+    } on Object {
+      // A camera that refuses a zoom ratio is not an error worth surfacing:
+      // the scan is still running, it just does not get the extra reach.
+      _autoZoomSuspended = true;
+      _stopAutoZoom();
+    }
+  }
 
   void _onEvent(Map<Object?, Object?> event) {
     switch (event['type']) {
@@ -285,6 +418,7 @@ class BarcodeScannerController extends ChangeNotifier {
             BarcodeResult.fromMap(item as Map<Object?, Object?>, size),
         ];
         _captures.add(BarcodeCapture(barcodes: results, imageSize: size));
+        _onDecodeSucceeded();
         if (_options.scanMode == ScanMode.single) {
           // The native side already stopped analysing; mirror that here so the
           // controller does not claim to be running.

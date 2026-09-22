@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lightweight_barcode_scanner/lightweight_barcode_scanner.dart';
 import 'package:lightweight_barcode_scanner/src/platform/scanner_channel.dart';
 
 /// Stands in for the platform without touching a MethodChannel.
 class FakeScannerChannel extends ScannerChannel {
-  FakeScannerChannel({this.permission = CameraPermissionStatus.granted});
+  FakeScannerChannel({
+    this.permission = CameraPermissionStatus.granted,
+    this.maxZoom = 8.0,
+  });
 
   CameraPermissionStatus permission;
+  double maxZoom;
   BarcodeScannerException? failOnCreate;
   final List<String> calls = <String>[];
   final Map<int, StreamController<Map<Object?, Object?>>> _events = {};
@@ -53,7 +59,7 @@ class FakeScannerChannel extends ScannerChannel {
       'isMirrored': false,
       'hasTorch': true,
       'minZoom': 1.0,
-      'maxZoom': 8.0,
+      'maxZoom': maxZoom,
     });
   }
 
@@ -131,9 +137,13 @@ void main() {
 
   BarcodeScannerController build({
     ScanMode scanMode = ScanMode.continuous,
+    AutoZoom autoZoom = AutoZoom.disabled,
+    double initialZoom = 1,
   }) => BarcodeScannerController(
     formats: {BarcodeFormat.qrCode},
     scanMode: scanMode,
+    autoZoom: autoZoom,
+    initialZoom: initialZoom,
     channel: channel,
   );
 
@@ -462,4 +472,181 @@ void main() {
       controller.dispose();
     });
   });
+
+  group('auto zoom', () {
+    // The ramp exists because a barcode that will not decode is usually one the
+    // lens cannot focus on - see ScannerOptions.autoZoom. These tests drive its
+    // timers rather than waiting on them.
+    test('zooms in once a stretch of frames decodes nothing', () {
+      fakeAsync((async) {
+        final controller = build(autoZoom: AutoZoom.enabled);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+        expect(controller.zoom, 1.0);
+
+        // Still inside the grace period: a working scan never sees the ramp.
+        async.elapse(const Duration(milliseconds: 900));
+        expect(controller.zoom, 1.0);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(controller.zoom, greaterThan(1.0));
+        expect(channel.calls.any((call) => call.startsWith('setZoom:')), isTrue);
+
+        // ... and never past the ceiling, however long it stays quiet.
+        async.elapse(const Duration(seconds: 30));
+        expect(controller.zoom, lessThanOrEqualTo(2.0));
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('gives the field of view back on the first read', () {
+      fakeAsync((async) {
+        final controller = build(autoZoom: AutoZoom.enabled);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        async.elapse(const Duration(seconds: 3));
+        expect(controller.zoom, greaterThan(1.0));
+
+        channel.emit(1, barcodeEvent('hello', BarcodeFormat.qrCode));
+        async.flushMicrotasks();
+        expect(controller.zoom, 1.0);
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('rests at initialZoom and ramps between it and 2x', () {
+      fakeAsync((async) {
+        final controller = build(autoZoom: AutoZoom.enabled, initialZoom: 1.4);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        // The camera opens tight rather than at 1x.
+        expect(controller.zoom, 1.4);
+
+        async.elapse(const Duration(seconds: 30));
+        expect(controller.zoom, greaterThan(1.4));
+        // Absolute ceiling, not 2x the resting point.
+        expect(controller.zoom, lessThanOrEqualTo(2.0));
+
+        // Handing the framing back is a step, not a fall to 1x.
+        channel.emit(1, barcodeEvent('hello', BarcodeFormat.qrCode));
+        async.flushMicrotasks();
+        expect(controller.zoom, 1.4);
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('initialZoom is clamped to what the camera reports', () {
+      fakeAsync((async) {
+        channel.maxZoom = 1.2;
+        final controller = build(initialZoom: 1.4);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        expect(controller.zoom, 1.2);
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('stays out of the way when it is switched off', () {
+      fakeAsync((async) {
+        final controller = build();
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        async.elapse(const Duration(seconds: 10));
+        expect(controller.zoom, 1.0);
+        expect(channel.calls.any((call) => call.startsWith('setZoom:')), isFalse);
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('a manual setZoom hands control back to the app for good', () {
+      fakeAsync((async) {
+        final controller = build(autoZoom: AutoZoom.enabled);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        unawaited(controller.setZoom(3));
+        async.flushMicrotasks();
+        expect(controller.zoom, 3.0);
+
+        async.elapse(const Duration(seconds: 10));
+        expect(controller.zoom, 3.0);
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('honours the platform the mode names', () {
+      // The test binding reports Android, so the Android-only mode should ramp
+      // and the iOS-only mode should stay put on the very same channel.
+      for (final (AutoZoom mode, bool shouldRamp) in <(AutoZoom, bool)>[
+        (AutoZoom.enabledAndroidOnly, true),
+        (AutoZoom.enabledIosOnly, false),
+      ]) {
+        fakeAsync((async) {
+          channel = FakeScannerChannel();
+          final controller = build(autoZoom: mode);
+          unawaited(controller.start());
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(seconds: 10));
+          expect(
+            controller.zoom > 1.0,
+            shouldRamp,
+            reason: '$mode on ${debugDefaultTargetPlatformOverride ?? "android"}',
+          );
+
+          controller.dispose();
+          async.flushMicrotasks();
+        });
+      }
+    });
+
+    test('the iOS-only mode ramps once the platform is iOS', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      fakeAsync((async) {
+        final controller = build(autoZoom: AutoZoom.enabledIosOnly);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        async.elapse(const Duration(seconds: 10));
+        expect(controller.zoom, greaterThan(1.0));
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('does nothing on a camera that cannot zoom', () {
+      fakeAsync((async) {
+        channel.maxZoom = 1.0;
+        final controller = build(autoZoom: AutoZoom.enabled);
+        unawaited(controller.start());
+        async.flushMicrotasks();
+
+        async.elapse(const Duration(seconds: 10));
+        expect(controller.zoom, 1.0);
+        expect(channel.calls.any((call) => call.startsWith('setZoom:')), isFalse);
+
+        controller.dispose();
+        async.flushMicrotasks();
+      });
+    });
+  });
+
 }

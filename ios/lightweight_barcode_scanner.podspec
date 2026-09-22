@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'lightweight_barcode_scanner'
-  s.version          = '0.2.0'
+  s.version          = '0.3.0'
   s.summary          = 'Offline barcode & QR scanner powered by a shared ZXing-C++ core.'
   s.description      = <<-DESC
 Lightweight, offline barcode and QR scanner. Camera frames are decoded inside
