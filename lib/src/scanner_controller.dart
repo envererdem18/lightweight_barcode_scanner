@@ -64,6 +64,8 @@ class BarcodeScannerController extends ChangeNotifier {
   // Guards against overlapping start()/stop() calls, which are easy to trigger
   // from lifecycle callbacks.
   Future<void>? _pendingTransition;
+  // Identity of the last barcode reported in ScanMode.distinct.
+  String? _lastDistinctIdentity;
 
   // --- auto zoom ---------------------------------------------------------
   //
@@ -132,6 +134,7 @@ class BarcodeScannerController extends ChangeNotifier {
 
   Future<void> _start() async {
     _setState(ScannerState.initializing, error: null);
+    _lastDistinctIdentity = null;
     try {
       final permission = await _channel.requestPermission();
       if (permission != CameraPermissionStatus.granted) {
@@ -413,12 +416,17 @@ class BarcodeScannerController extends ChangeNotifier {
         );
         final raw = event['barcodes'];
         if (raw is! List || raw.isEmpty) return;
-        final results = <BarcodeResult>[
+        var results = <BarcodeResult>[
           for (final item in raw)
             BarcodeResult.fromMap(item as Map<Object?, Object?>, size),
         ];
-        _captures.add(BarcodeCapture(barcodes: results, imageSize: size));
+        // A read is a read for auto zoom, whether or not it gets reported.
         _onDecodeSucceeded();
+        if (_options.scanMode == ScanMode.distinct) {
+          results = _filterDistinct(results);
+          if (results.isEmpty) return;
+        }
+        _captures.add(BarcodeCapture(barcodes: results, imageSize: size));
         if (_options.scanMode == ScanMode.single) {
           // The native side already stopped analysing; mirror that here so the
           // controller does not claim to be running.
@@ -443,6 +451,18 @@ class BarcodeScannerController extends ChangeNotifier {
           ),
         );
     }
+  }
+
+  /// Drops every result that repeats the one reported before it.
+  List<BarcodeResult> _filterDistinct(List<BarcodeResult> results) {
+    final accepted = <BarcodeResult>[];
+    for (final result in results) {
+      final identity = result.identity;
+      if (identity == _lastDistinctIdentity) continue;
+      _lastDistinctIdentity = identity;
+      accepted.add(result);
+    }
+    return accepted;
   }
 
   Future<void> _releaseSession() async {

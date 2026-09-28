@@ -1,3 +1,11 @@
+## 0.4.0
+
+* **`ScanMode.distinct`**: keeps scanning like `continuous`, but only reports a
+  barcode whose `format + value` differs from the last one reported, so a
+  symbol held in view fires `onDetected` once instead of every time the
+  duplicate filter expires. Filtered in Dart; the native side runs it as
+  `continuous`.
+
 ## 0.3.0
 
 * **Auto zoom, on by default** (`ScannerOptions.autoZoom`, an `AutoZoom` mode:

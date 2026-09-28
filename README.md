@@ -26,7 +26,7 @@ interest, memory and why there is no ML runtime - see
 
 ```yaml
 dependencies:
-  lightweight_barcode_scanner: ^0.1.0
+  lightweight_barcode_scanner: ^0.4.0
 ```
 
 ### Android
@@ -225,6 +225,7 @@ BarcodeScannerController(
 | `continuous` | Keeps scanning. The default |
 | `single` | Stops analysing after the first accepted barcode; the controller moves to `paused` |
 | `multiple` | Returns every barcode found in a frame. Costs more CPU, so it is opt-in |
+| `distinct` | Keeps scanning like `continuous`, but only reports a barcode that differs from the last one reported. A symbol held in view fires once, however long it stays there |
 
 The same `format + value` is suppressed for `duplicateFilterDuration`, natively,
 before it ever crosses into Dart. `Duration.zero` disables suppression and gives

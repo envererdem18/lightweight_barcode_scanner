@@ -15,6 +15,17 @@ enum ScanMode {
   /// Report every barcode found in a frame instead of just the first one.
   /// Costs measurably more CPU, so it is opt-in.
   multiple,
+
+  /// Keep scanning like [continuous], but only report a barcode whose
+  /// `format + value` differs from the last one reported. Holding the camera
+  /// over the same symbol yields a single event no matter how long it stays in
+  /// view; the next different symbol is reported straight away, and returning
+  /// to the first one after it reports that one again.
+  ///
+  /// Unlike [ScannerOptions.duplicateFilterDuration] this is not time based.
+  /// The memory lasts for the camera session and is cleared by
+  /// [BarcodeScannerController.start].
+  distinct,
 }
 
 /// Which camera to open.
@@ -205,7 +216,10 @@ class ScannerOptions {
     final region = scanRegion;
     return <String, Object?>{
       'formats': BarcodeFormat.toMask(formats),
-      'scanMode': scanMode.name,
+      // `distinct` is filtered in Dart; natively it is plain `continuous`.
+      'scanMode': scanMode == ScanMode.distinct
+          ? ScanMode.continuous.name
+          : scanMode.name,
       'facing': facing.name,
       'resolution': resolution.name,
       'profile': profile.name,

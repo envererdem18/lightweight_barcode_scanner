@@ -36,7 +36,7 @@ class _ScannerPageState extends State<ScannerPage> {
     super.initState();
     _controller = BarcodeScannerController(
       formats: {BarcodeFormat.qrCode, BarcodeFormat.ean13, BarcodeFormat.ean8, BarcodeFormat.code128, BarcodeFormat.code39},
-      scanMode: ScanMode.multiple,
+      scanMode: ScanMode.distinct,
       duplicateFilterDuration: const Duration(seconds: 1),
       detectionsPerSecond: 12,
     );
