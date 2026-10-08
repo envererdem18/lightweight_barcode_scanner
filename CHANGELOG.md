@@ -1,3 +1,24 @@
+## 0.4.1
+
+* **Fixed the scanner staying on its placeholder after the first camera
+  permission prompt on iOS.** The prompt makes the app inactive and then
+  resumes it while `start()` is still waiting on the answer. The controller
+  decided what to do from its current state, which had not caught up yet, so a
+  `start()` arriving behind a queued `stop()` was dropped and the camera ended
+  up stopped until the app was relaunched. `start()` and `stop()` now follow
+  the most recent call, and overlapping `start()` calls no longer open a second
+  session.
+* `BarcodeScannerView` releases a camera that is still opening when the app
+  actually goes to the background, and reopens it on return. Merely becoming
+  inactive, which is what the permission prompt does, leaves it alone.
+* iOS: a session released before its camera came up now answers `start()`
+  instead of leaving it pending, and the capture session is stopped on its own
+  queue, behind any `startRunning()` still in progress.
+* Android: a session released before CameraX came up now answers `start()`,
+  and a permission request whose activity is destroyed for good is answered
+  with the current status instead of leaving `start()` pending. A config
+  change still waits for the recreated activity to deliver the result.
+
 ## 0.4.0
 
 * **`ScanMode.distinct`**: keeps scanning like `continuous`, but only reports a

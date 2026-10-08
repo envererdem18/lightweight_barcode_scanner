@@ -65,6 +65,17 @@ class CameraPermissions : PluginRegistry.RequestPermissionsResultListener {
     }
 
     /**
+     * Answers a request whose activity is gone for good, so its result will
+     * never be delivered. A config change is different: the recreated
+     * activity receives the result, so the request is left pending then.
+     */
+    fun cancelPending(context: Context) {
+        val callback = pending ?: return
+        pending = null
+        callback(status(context))
+    }
+
+    /**
      * Distinguishes "denied once" from "don't ask again": after a denial the
      * system only offers a rationale while it is still willing to ask.
      */

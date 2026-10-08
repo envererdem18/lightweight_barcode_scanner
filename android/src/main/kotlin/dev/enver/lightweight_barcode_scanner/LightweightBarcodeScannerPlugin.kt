@@ -54,9 +54,14 @@ class LightweightBarcodeScannerPlugin : FlutterPlugin, MethodCallHandler, Activi
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) =
         onAttachedToActivity(binding)
 
-    override fun onDetachedFromActivityForConfigChanges() = onDetachedFromActivity()
+    override fun onDetachedFromActivityForConfigChanges() = detachActivity()
 
     override fun onDetachedFromActivity() {
+        detachActivity()
+        permissions.cancelPending(context)
+    }
+
+    private fun detachActivity() {
         activityBinding?.removeRequestPermissionsResultListener(permissions)
         activityBinding = null
         // The activity is going away and with it the surfaces the camera is

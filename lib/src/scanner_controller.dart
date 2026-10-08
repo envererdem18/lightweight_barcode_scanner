@@ -62,8 +62,14 @@ class BarcodeScannerController extends ChangeNotifier {
   bool _torchEnabled = false;
   double _zoom = 1;
   // Guards against overlapping start()/stop() calls, which are easy to trigger
-  // from lifecycle callbacks.
+  // from lifecycle callbacks. Null once the queue has drained.
   Future<void>? _pendingTransition;
+  // What the most recent start()/stop() asked for. While a transition is in
+  // flight [state] still describes the old situation, so deciding from it
+  // drops calls: iOS's permission prompt makes the app inactive and then
+  // resumes it while the first start() is still waiting on the answer, and a
+  // start() swallowed there leaves the camera stopped behind a placeholder.
+  bool _wantsRunning = false;
   // Identity of the last barcode reported in ScanMode.distinct.
   String? _lastDistinctIdentity;
 
@@ -126,10 +132,16 @@ class BarcodeScannerController extends ChangeNotifier {
   /// Safe to call when already running: it returns without doing anything.
   Future<void> start() {
     _assertUsable();
-    if (_state == ScannerState.running || _state == ScannerState.initializing) {
-      return _pendingTransition ?? Future<void>.value();
+    final pending = _pendingTransition;
+    if (_wantsRunning && pending != null) return pending;
+    if (pending == null && _state == ScannerState.running) {
+      return Future<void>.value();
     }
-    return _serialize(_start);
+    _wantsRunning = true;
+    return _serialize(() async {
+      if (_state == ScannerState.running) return;
+      await _start();
+    });
   }
 
   Future<void> _start() async {
@@ -184,10 +196,15 @@ class BarcodeScannerController extends ChangeNotifier {
   /// while a result dialog is open.
   Future<void> stop() {
     _assertUsable();
-    if (_state == ScannerState.idle || _state == ScannerState.stopped) {
+    final pending = _pendingTransition;
+    if (!_wantsRunning && pending != null) return pending;
+    if (pending == null &&
+        (_state == ScannerState.idle || _state == ScannerState.stopped)) {
       return Future<void>.value();
     }
+    _wantsRunning = false;
     return _serialize(() async {
+      if (_state == ScannerState.idle || _state == ScannerState.stopped) return;
       await _releaseSession();
       _preview = null;
       _torchEnabled = false;
@@ -489,7 +506,11 @@ class BarcodeScannerController extends ChangeNotifier {
         .then((_) => _state == ScannerState.disposed
             ? Future<void>.value()
             : action());
-    _pendingTransition = next.catchError((Object _) {});
+    late final Future<void> settled;
+    settled = next.catchError((Object _) {}).whenComplete(() {
+      if (identical(_pendingTransition, settled)) _pendingTransition = null;
+    });
+    _pendingTransition = settled;
     return next;
   }
 

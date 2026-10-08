@@ -128,7 +128,15 @@ class _BarcodeScannerViewState extends State<BarcodeScannerView>
       case AppLifecycleState.detached:
         // Hold on to the camera in the background and another app - or the
         // system - will take it from us anyway. Release it deliberately.
-        if (controller.state == ScannerState.running ||
+        //
+        // A camera that is still opening is left alone while merely inactive:
+        // that is what the system permission prompt does to the app, and the
+        // start() it interrupts is the one waiting for its answer.
+        final opening =
+            controller.state == ScannerState.initializing &&
+            state != AppLifecycleState.inactive;
+        if (opening ||
+            controller.state == ScannerState.running ||
             controller.state == ScannerState.paused) {
           _restartOnResume = true;
           unawaited(controller.stop());

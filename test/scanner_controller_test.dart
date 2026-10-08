@@ -17,6 +17,8 @@ class FakeScannerChannel extends ScannerChannel {
   CameraPermissionStatus permission;
   double maxZoom;
   BarcodeScannerException? failOnCreate;
+  // When set, requestPermission() waits on it: the system prompt is up.
+  Completer<CameraPermissionStatus>? permissionPrompt;
   final List<String> calls = <String>[];
   final Map<int, StreamController<Map<Object?, Object?>>> _events = {};
   int _nextId = 1;
@@ -29,6 +31,8 @@ class FakeScannerChannel extends ScannerChannel {
   @override
   Future<CameraPermissionStatus> requestPermission() async {
     calls.add('requestPermission');
+    final prompt = permissionPrompt;
+    if (prompt != null) return prompt.future;
     return permission;
   }
 
@@ -212,6 +216,68 @@ void main() {
       await controller.stop();
       await controller.start();
       expect(controller.state, ScannerState.running);
+      controller.dispose();
+    });
+
+    test('start() issued while a stop is queued is not dropped', () async {
+      // What the iOS permission prompt does to a lifecycle-driven caller: the
+      // prompt makes the app inactive (stop) and returning from it resumes
+      // (start), all while the first start() is still waiting on the answer.
+      final prompt = channel.permissionPrompt =
+          Completer<CameraPermissionStatus>();
+      final controller = build();
+
+      final first = controller.start();
+      final stop = controller.stop();
+      final second = controller.start();
+      prompt.complete(CameraPermissionStatus.granted);
+      await Future.wait([first, stop, second]);
+
+      expect(controller.state, ScannerState.running);
+      expect(controller.preview, isNotNull);
+      controller.dispose();
+    });
+
+    test('start() issued while stopping restarts the camera', () async {
+      final controller = build();
+      await controller.start();
+
+      final stop = controller.stop();
+      expect(controller.state, ScannerState.running, reason: 'still in flight');
+      final start = controller.start();
+      await Future.wait([stop, start]);
+
+      expect(controller.state, ScannerState.running);
+      expect(controller.preview, isNotNull);
+      expect(channel.calls.where((call) => call == 'create').length, 2);
+      controller.dispose();
+    });
+
+    test('stop() issued while starting wins', () async {
+      final prompt = channel.permissionPrompt =
+          Completer<CameraPermissionStatus>();
+      final controller = build();
+
+      final start = controller.start();
+      final stop = controller.stop();
+      prompt.complete(CameraPermissionStatus.granted);
+      await Future.wait([start, stop]);
+
+      expect(controller.state, ScannerState.stopped);
+      expect(controller.preview, isNull);
+      controller.dispose();
+    });
+
+    test('repeated start() calls while starting open one session', () async {
+      final prompt = channel.permissionPrompt =
+          Completer<CameraPermissionStatus>();
+      final controller = build();
+
+      final starts = [controller.start(), controller.start()];
+      prompt.complete(CameraPermissionStatus.granted);
+      await Future.wait(starts);
+
+      expect(channel.calls.where((call) => call == 'create').length, 1);
       controller.dispose();
     });
 

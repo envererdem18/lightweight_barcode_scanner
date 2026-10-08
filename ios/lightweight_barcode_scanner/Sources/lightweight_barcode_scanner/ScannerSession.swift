@@ -108,7 +108,12 @@ final class ScannerSession: NSObject {
 
     updateRotation()
     captureQueue.async { [weak self] in
-      guard let self, !self.released else { return }
+      guard let self, !self.released else {
+        // Released before the camera came up. Still answer: a start() that
+        // never returns leaves Dart waiting behind a placeholder for good.
+        DispatchQueue.main.async { completion(.failure(ScannerError.invalidState)) }
+        return
+      }
       self.analyzing = true
       self.session.startRunning()
       DispatchQueue.main.async {
@@ -217,12 +222,19 @@ final class ScannerSession: NSObject {
     eventChannel.setStreamHandler(nil)
     eventSink = nil
 
-    if session.isRunning { session.stopRunning() }
-    videoOutput.setSampleBufferDelegate(nil, queue: nil)
-    session.beginConfiguration()
-    session.inputs.forEach(session.removeInput)
-    session.outputs.forEach(session.removeOutput)
-    session.commitConfiguration()
+    // On captureQueue, behind any startRunning() still in progress there:
+    // stopping from the main thread could run first and leave the session
+    // running once that start finishes.
+    let session = self.session
+    let videoOutput = self.videoOutput
+    captureQueue.async {
+      if session.isRunning { session.stopRunning() }
+      videoOutput.setSampleBufferDelegate(nil, queue: nil)
+      session.beginConfiguration()
+      session.inputs.forEach(session.removeInput)
+      session.outputs.forEach(session.removeOutput)
+      session.commitConfiguration()
+    }
 
     if textureId >= 0 {
       registry.unregisterTexture(textureId)

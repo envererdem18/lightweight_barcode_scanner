@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lightweight_barcode_scanner/lightweight_barcode_scanner.dart';
@@ -120,6 +122,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.state, ScannerState.running);
 
+    controller.dispose();
+  });
+
+  testWidgets('comes up after the iOS permission prompt is answered',
+      (tester) async {
+    // The prompt makes the app inactive while start() waits on its answer;
+    // answering it resumes the app.
+    final prompt = channel.permissionPrompt =
+        Completer<CameraPermissionStatus>();
+    final controller = await pumpView(tester);
+    await tester.pump();
+    expect(controller.state, ScannerState.initializing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    prompt.complete(CameraPermissionStatus.granted);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(controller.state, ScannerState.running);
+    expect(find.byType(Texture), findsOneWidget);
+    controller.dispose();
+  });
+
+  testWidgets('a camera backgrounded while opening restarts on resume',
+      (tester) async {
+    final prompt = channel.permissionPrompt =
+        Completer<CameraPermissionStatus>();
+    final controller = await pumpView(tester);
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    prompt.complete(CameraPermissionStatus.granted);
+    await tester.pumpAndSettle();
+    expect(controller.state, ScannerState.stopped);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(controller.state, ScannerState.running);
     controller.dispose();
   });
 }

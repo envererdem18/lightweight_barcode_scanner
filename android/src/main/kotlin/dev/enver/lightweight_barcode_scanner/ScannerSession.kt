@@ -116,7 +116,12 @@ class ScannerSession(
     fun start(onResult: (Result<Map<String, Any?>>) -> Unit) {
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
-            if (released) return@addListener
+            if (released) {
+                // Still answer: a start() that never returns leaves Dart
+                // waiting behind a placeholder for good.
+                onResult(Result.failure(IllegalStateException("The scanner session was released.")))
+                return@addListener
+            }
             try {
                 cameraProvider = future.get()
                 bind()

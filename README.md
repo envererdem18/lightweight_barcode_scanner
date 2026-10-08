@@ -26,7 +26,7 @@ interest, memory and why there is no ML runtime - see
 
 ```yaml
 dependencies:
-  lightweight_barcode_scanner: ^0.4.0
+  lightweight_barcode_scanner: ^0.4.1
 ```
 
 ### Android
